@@ -10,11 +10,30 @@ For this, sample java maven-based application is used to demonstrate build cachi
 * Assumed you are already familiar with OCI DevOps. Please refer [Documentation](https://www.oracle.com/devops/devops-service/)
 * To know how to run the this maven project in your local. Please refer [this](./SETUP-PROJECT.md)
 * Assumed that you are using docker build inside your `build_spec.yaml`
+* As OCI Object storage is used to store the cache, Please create a bucket and set right access policies for the same. [Click here](https://docs.oracle.com/en-us/iaas/Content/Object/Concepts/objectstorageoverview.htm) to know more about Object Storage.
+
+### References
+* [OCI DevOps CICD Reference Architecture](https://docs.oracle.com/en/solutions/ci-cd-pipe-oci-devops/index.html)
+* [OCI DevOps Documentation](https://docs.oracle.com/en-us/iaas/Content/devops/using/home.htm)
+* [Creating DevOps Project](https://docs.oracle.com/en-us/iaas/Content/devops/using/create_project.htm)
+* [Creating Repository](https://docs.oracle.com/en-us/iaas/Content/devops/using/managing_coderepo.htm)
+* [Creating Build Pipeline](https://docs.oracle.com/en-us/iaas/Content/devops/using/managing_build_pipelines.htm)
+* [Creating Deploy Pipeline](https://docs.oracle.com/en-us/iaas/Content/devops/using/deployment_pipelines.htm)
+
 
 ### Overview of Changes
 For any project, you may tweek `build_spec.yaml` to enable build cache.
 
-#### Step 1:
+#### Step 1
+* Create OCI Object Storage bucket `build-cache`
+* Create Policies, for build to access Object Storage bucket.
+```
+Allow dynamic-group <dg-devops-build-pipeline> to read buckets in compartment <compartment-name>
+
+Allow dynamic-group <dg-devops-build-pipeline> to manage objects in compartment <compartment-name> where all {target.bucket.name='build-cache'}
+```
+
+#### Step 2
 Docker BuildKit is installed to enable few advanced docker build commands for caching.
 ```
   - type: Command
@@ -27,7 +46,7 @@ Docker BuildKit is installed to enable few advanced docker build commands for ca
       chmod +x ~/.docker/cli-plugins/docker-buildx
       docker buildx install
 ```
-#### Step 2
+#### Step 3
 `Build Cache Restore` stage is used to download the pre-uploaded cache from OCI Object Storage.
 
 ```
@@ -39,7 +58,7 @@ Docker BuildKit is installed to enable few advanced docker build commands for ca
       echo "Done..."
 ```
 
-#### Step 3
+#### Step 4
 In actual build stage, below comands are used in the place of regular `docker build`.
 ```
   - type: Command
@@ -52,7 +71,7 @@ In actual build stage, below comands are used in the place of regular `docker bu
       echo "DONE"
 ```
 
-#### Step 4
+#### Step 5
 `Build Cache Upload` stage is added to collect the generated build cache and upload to OCI Object Storage bucket. This is used for subsequent builds.
 
 ```
@@ -62,6 +81,13 @@ In actual build stage, below comands are used in the place of regular `docker bu
     command: |
       rm ${BUILD_CACHE_OS_FILE_NAME} && zip -r ${BUILD_CACHE_OS_FILE_NAME} cache/*
       oci os object put --bucket-name build-cache --file ${BUILD_CACHE_OS_FILE_NAME} --force
+```
+
+#### Step 6
+In `Dockerfile`, We need to pass `--mount` argument to `RUN` command to use cache for the specific build command as below.
+
+```
+RUN --mount=type=cache,target=/root/.m2 mvn package
 ```
 
 ### Results
